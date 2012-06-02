@@ -1,6 +1,6 @@
 #include <SoftwareSerial.h>
 #include <TinyGPS.h>
-#include <stdio.h>
+//#include <stdio.h>
 
 //Define some variables to hold GPS data
 unsigned long date, time, age;
