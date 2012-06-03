@@ -1,6 +1,5 @@
 #include <SoftwareSerial.h>
 #include <TinyGPS.h>
-//#include <stdio.h>
 
 //Define some variables to hold GPS data
 unsigned long date, time, age;
@@ -34,6 +33,8 @@ void loop() {
   Serial.println("Requesting NMEA sentence from GPS");
   //Request NMEA sentence from GPS
   ss.print("$PUBX,00*33\r\n");
+  //GPS does not respond immediately, so give it 1.5 seconds
+  delay(1500);
   while (ss.available() > 0) {
     int c = ss.read();
     //Pass TinyGPS integer values of each character recieved from the GPS and encode
@@ -57,8 +58,8 @@ void loop() {
       Serial.println(timeBuffer);
     }
   }
-  //This creates a two second gap between GPS readouts
-  delay(2000);
+  //This creates a 3.5 second gap between GPS readouts
+  delay(3500);
 }
 
 //OLD CODE//
