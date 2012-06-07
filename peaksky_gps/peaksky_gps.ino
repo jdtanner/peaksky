@@ -1,11 +1,12 @@
 #include <SoftwareSerial.h>
 #include <TinyGPS.h>
+#include <util/crc16.h>
 
 //Define some variables to hold GPS data
 unsigned long date, time, age;
-int hour, minute, second, numberOfSatellites, iteration = 1;
+int hour, minute, second, numberOfSatellites, iteration = 1, transmitCheck;
 long int gpsAltitude;
-char latitudeBuffer[12], longitudeBuffer[12], timeBuffer[] = "00:00:00";
+char latitudeBuffer[12], longitudeBuffer[12], timeBuffer[] = "00:00:00", transmitBuffer[128];
 float floatLatitude, floatLongitude;
 
 //Create a new TinyGPS object
@@ -25,7 +26,7 @@ void setup() {
   //Set the GPS into airborne mode
   Serial.print("Setting uBlox nav mode: ");
   uint8_t setNav[] = {
-    0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC      };
+    0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC        };
   sendUBX(setNav, sizeof(setNav)/sizeof(uint8_t));
   getUBX_ACK(setNav);
 
@@ -45,14 +46,14 @@ void setup() {
 
 //Loop function of Arduino
 void loop() {
-  Serial.println("Requesting NMEA sentence from GPS");
+  //Serial.println("Requesting NMEA sentence from GPS");
 
   //Request NMEA sentence from GPS
   ss.print("$PUBX,00*33\r\n");
 
   //GPS does not respond immediately, so give it 1.5 seconds
   delay(1500);
-  //int i = -1;
+
   while (ss.available() > 0) {
     int c = ss.read();
 
@@ -61,16 +62,16 @@ void loop() {
 
     //Only if TinyGPS has received a complete NMEA sentence
     if (checkNMEASentence > 0) {
-      Serial.println("TinyGPS received a complete NMEA sentence");
+      //Serial.println("TinyGPS received a complete NMEA sentence");
 
       //Print interation count of loop
-      Serial.print("Interation: ");
-      Serial.println(iteration);
+      //Serial.print("Interation: ");
+      //Serial.println(iteration);
 
       //Query the TinyGPS object for the number of satellites
       numberOfSatellites = gps.sats();
-      Serial.print("Number of satellites: ");
-      Serial.println(numberOfSatellites);
+      //Serial.print("Number of satellites: ");
+      //Serial.println(numberOfSatellites);
 
       //Query the TinyGPS object for the date, time and age
       gps.get_datetime(&date, &time, &age);
@@ -82,7 +83,7 @@ void loop() {
       second = second / 100;
 
       //Output the time data to a character array
-      sprintf(timeBuffer, "%02d:%02d:%02d", hour, minute, second);
+      //sprintf(timeBuffer, "%02d:%02d:%02d", hour, minute, second);
 
       if (numberOfSatellites >= 1) {
 
@@ -99,29 +100,39 @@ void loop() {
           longitudeBuffer[0] = '+';
         }
 
-        // +/- altitude in meters
+        //Convert altitude to metres
         gpsAltitude = (gps.altitude() / 100);
 
-        Serial.print("Latitude: ");
-        Serial.println(latitudeBuffer);
-        Serial.print("Longitude: ");
-        Serial.println(longitudeBuffer);
-        Serial.print("Altitude: ");
-        Serial.println(gpsAltitude);    
+        //Serial.print("Latitude: ");
+        //Serial.println(latitudeBuffer);
+        //Serial.print("Longitude: ");
+        //Serial.println(longitudeBuffer);
+        //Serial.print("Altitude: ");
+        //Serial.println(gpsAltitude);    
+
+        transmitCheck=sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites);
+
+        if (transmitCheck > -1){
+          transmitCheck = sprintf (transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
+          Serial.print(transmitBuffer);
+          //rtty_txstring(superbuffer);
+        }
+        iteration++;        
       }
 
-      Serial.print("Time: ");
-      Serial.println(timeBuffer);
-      Serial.println("------------------------");
-
-      iteration++;
+      //Serial.print("Time: ");
+      //Serial.println(timeBuffer);
+      //Serial.println("------------------------");
     }
   }
 
-  //This creates a 3.5 second gap between GPS readouts
-  //This is probably where the RTTY code will go eventually :)
-  delay(3500);
+  //This creates a 10 second gap between GPS readouts
+  delay(10000);
 }
+
+////////////////////
+//HELPER FUNCTIONS//
+////////////////////
 
 // Send a byte array of UBX protocol to the GPS
 void sendUBX(uint8_t *MSG, uint8_t len) {
@@ -190,5 +201,25 @@ boolean getUBX_ACK(uint8_t *MSG) {
     }
   }
 }
+
+//CRC16 checksum
+uint16_t gps_CRC16_checksum (char *string)
+{
+  size_t i;
+  uint16_t crc;
+  uint8_t c;
+
+  crc = 0xFFFF;
+
+  // Calculate checksum ignoring the first two $s
+  for (i = 2; i < strlen(string); i++)
+  {
+    c = string[i];
+    crc = _crc_xmodem_update (crc, c);
+  }
+
+  return crc;
+}
+
 
 
