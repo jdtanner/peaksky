@@ -63,7 +63,7 @@ void setup() {
 
 //Loop function of Arduino
 void loop() {
-
+  
   //Request NMEA sentence from GPS
   ss.print("$PUBX,00*33\r\n");
 
