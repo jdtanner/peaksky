@@ -6,6 +6,7 @@
 //Required for RTTY function
 #define RADIO_SPACE_PIN 10
 #define RADIO_MARK_PIN 11
+#define ENABLE_RTTY 12
 #define ASCII 7
 #define BAUD 50
 #define INTER_BIT_DELAY (1000/BAUD)
@@ -29,6 +30,7 @@ void setup() {
   //Set up RTTY pins
   pinMode(RADIO_MARK_PIN,OUTPUT);
   pinMode(RADIO_SPACE_PIN,OUTPUT);
+  pinMode(ENABLE_RTTY,OUTPUT);
 
   //Start up software and hardware serial at 9600 baud
   ss.begin(9600);
@@ -37,7 +39,7 @@ void setup() {
 
   //Set the GPS into airborne mode
   uint8_t setNav[] = {
-    0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC          };
+    0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC};
   sendUBX(setNav, sizeof(setNav)/sizeof(uint8_t));
   getUBX_ACK(setNav);
 
@@ -56,14 +58,14 @@ void setup() {
   delay(500);
   ss.print("$PUBX,40,GGA,0,0,0,0*5A\r\n");
   delay(500);
-  
+
   //Give the GPS time to breathe :)
   delay(2500);
 }
 
 //Loop function of Arduino
 void loop() {
-  
+
   //Request NMEA sentence from GPS
   ss.print("$PUBX,00*33\r\n");
 
@@ -92,7 +94,8 @@ void loop() {
       second = second / 100;
 
       if (numberOfSatellites >= 1) {
-
+        digitalWrite(ENABLE_RTTY, HIGH);
+        digitalWrite(13, HIGH);
         //Get Position
         gps.f_get_position(&floatLatitude, &floatLongitude);
 
@@ -112,18 +115,14 @@ void loop() {
         //Construct the transmit buffer
         transmitCheck=sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites);
 
-        if (transmitCheck > -1){
+        if (transmitCheck > -1) {
 
           //Append the CRC16 checksum to the end of the transmit buffer
           transmitCheck = sprintf (transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
 
           //Pass the transmit buffer to the RTTY function
           Serial.print(transmitBuffer);
-          rtty_txstring(transmitBuffer);
-
-          // Delay for 8.5 seconds
-          delay(8500);                                     
-
+          rtty_txstring(transmitBuffer);                                
         }
         iteration++;        
       }
@@ -131,22 +130,21 @@ void loop() {
   }
 }
 
-////////////////////
-//HELPER FUNCTIONS//
-////////////////////
-
+//----------------------------------------------------                                                      
+//HELPER FUNCTIONS
+//----------------------------------------------------                                                      
 void sendUBX(uint8_t *MSG, uint8_t len) {           // Send a byte array of UBX protocol to the GPS
   for(int i=0; i<len; i++) {
     ss.write(MSG[i]);
   }
 }
-
+//----------------------------------------------------                                                      
 boolean getUBX_ACK(uint8_t *MSG) {                  // Calculate expected UBX ACK packet and parse UBX response from GPS
   uint8_t b;
   uint8_t ackByteID = 0;
   uint8_t ackPacket[10];
   unsigned long startTime = millis();
-                                                    // Construct the expected ACK packet    
+  // Construct the expected ACK packet    
   ackPacket[0] = 0xB5;	                            // header
   ackPacket[1] = 0x62;	                            // header
   ackPacket[2] = 0x05;	                            // class
@@ -180,9 +178,8 @@ boolean getUBX_ACK(uint8_t *MSG) {                  // Calculate expected UBX AC
     }
   }
 }
-                                                      
-uint16_t gps_CRC16_checksum (char *string)          // CRC16 checksum function
-{
+//----------------------------------------------------                                                      
+uint16_t gps_CRC16_checksum(char *string) {         // CRC16 checksum function
   size_t i;
   uint16_t crc;
   uint8_t c;
@@ -194,32 +191,31 @@ uint16_t gps_CRC16_checksum (char *string)          // CRC16 checksum function
   }
   return crc;
 }
-
-void rtty_txstring (char *string) {                 // Transmit a string, one char at a time		
+//----------------------------------------------------                                                      
+void rtty_txstring(char *string) {                  // Transmit a string, one char at a time		
   int i;					    // Define disposable integer counter variable
   for (i = 0; i < strlen(string); i++)	            // Iterate over the string array
   {
     rtty_txbyte(string[i]);			    // Pass each element of the string array to rtty_txbyte
   }
 }
-
-void rtty_txbyte (char c)                           // Convert each character byte to bits
-{
+//----------------------------------------------------                                                      
+void rtty_txbyte(char c) {                          // Convert each character byte to bits
   int i;                                            // Define disposible integer counter variable
   rtty_txbit (0); 				    // Start bit
-  for (i=0;i<ASCII;i++)				    // 7-bit ascii
+  for (i=0;i<ASCII;i++)				    // 7-bit ascii (see DEFINE above)
   {
     if (c & 1) rtty_txbit(1); 		            // Starting with least significant bit, if bit=1 then transmit MARK 
     else rtty_txbit(0);			            // If bit=0 then transmit SPACE
     c = c >> 1;                                     // Shift along to the next bit
   }
-  rtty_txbit (1);                                   // Stop bit
-  rtty_txbit (1);                                   // Stop bit                 
+  rtty_txbit(1);                                    // Stop bit
+  rtty_txbit(1);                                    // Stop bit                 
 }
-
-void rtty_txbit (int bit)                           // Transmit individual bits
-{
+//----------------------------------------------------                                                      
+void rtty_txbit(int bit) {                          // Transmit individual bits
   digitalWrite(RADIO_MARK_PIN,(bit>0)?HIGH:LOW);
   digitalWrite(RADIO_SPACE_PIN,(bit>0)?LOW:HIGH);
   delay(INTER_BIT_DELAY);                           // 50 bits per second i.e. baudrate
 }
+
