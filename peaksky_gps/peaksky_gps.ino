@@ -3,13 +3,14 @@
 #include <TinyGPS.h>
 #include <util/crc16.h>
 
-//Required for RTTY function
-#define RADIO_SPACE_PIN 10
-#define RADIO_MARK_PIN 11
+//Make definitions
+//#define RADIO_SPACE_PIN 10 //Not needed if doing PWM
+//#define RADIO_MARK_PIN 11 //Not needed if doing PWM
 #define ENABLE_RTTY 12
 #define ASCII 7
 #define BAUD 50
 #define INTER_BIT_DELAY (1000/BAUD)
+#define PWM_PIN 9
 
 //Define some variables to hold GPS data
 unsigned long date, time, age;
@@ -28,9 +29,13 @@ SoftwareSerial ss(2,3);
 void setup() {
 
   //Set up RTTY pins
-  pinMode(RADIO_MARK_PIN,OUTPUT);
-  pinMode(RADIO_SPACE_PIN,OUTPUT);
-  pinMode(ENABLE_RTTY,OUTPUT);
+  //pinMode(RADIO_MARK_PIN,OUTPUT); //Not needed if doing PWM
+  //pinMode(RADIO_SPACE_PIN,OUTPUT); //Not needed if doing PWM
+  
+  //Set up pin to enable radio, PWM pin, and PWM frequency
+  pinMode(ENABLE_RTTY,OUTPUT); 
+  pinMode(PWM_PIN, OUTPUT);
+  setPwmFrequency(PWM_PIN, 1); 
 
   //Start up software and hardware serial at 9600 baud
   ss.begin(9600);
@@ -83,7 +88,7 @@ void loop() {
 
       //Query the TinyGPS object for the number of satellites
       numberOfSatellites = gps.sats();
-
+      Serial.println(numberOfSatellites);
       //Query the TinyGPS object for the date, time and age
       gps.get_datetime(&date, &time, &age);
 
@@ -95,7 +100,7 @@ void loop() {
 
       if (numberOfSatellites >= 1) {
         digitalWrite(ENABLE_RTTY, HIGH);
-        digitalWrite(13, HIGH);
+
         //Get Position
         gps.f_get_position(&floatLatitude, &floatLongitude);
 
@@ -196,26 +201,106 @@ void rtty_txstring(char *string) {                  // Transmit a string, one ch
   int i;					    // Define disposable integer counter variable
   for (i = 0; i < strlen(string); i++)	            // Iterate over the string array
   {
-    rtty_txbyte(string[i]);			    // Pass each element of the string array to rtty_txbyte
+    //rtty_txbyte(string[i]);			    // Pass each element of the string array to rtty_txbyte; not required if using PWM
+    rtty_pwmtxbyte(string[i]);			    // Pass each element of the string array to rtty_pwmtxbyte
   }
 }
 //----------------------------------------------------                                                      
-void rtty_txbyte(char c) {                          // Convert each character byte to bits
+void setPwmFrequency(int pin, int divisor) {        // See http://arduino.cc/playground/Code/PwmFrequency
+  byte mode;
+  if(pin == 5 || pin == 6 || pin == 9 || pin == 10) {
+    switch(divisor) {
+    case 1:
+      mode = 0x01;
+      break;
+    case 8:
+      mode = 0x02;
+      break;
+    case 64:
+      mode = 0x03;
+      break;
+    case 256:
+      mode = 0x04;
+      break;
+    case 1024:
+      mode = 0x05;
+      break;
+    default:
+      return;
+    }
+    if(pin == 5 || pin == 6) {
+      TCCR0B = TCCR0B & 0b11111000 | mode;
+    }
+    else {
+      TCCR1B = TCCR1B & 0b11111000 | mode;
+    }
+  }
+  else if(pin == 3 || pin == 11) {
+    switch(divisor) {
+    case 1:
+      mode = 0x01;
+      break;
+    case 8:
+      mode = 0x02;
+      break;
+    case 32:
+      mode = 0x03;
+      break;
+    case 64:
+      mode = 0x04;
+      break;
+    case 128:
+      mode = 0x05;
+      break;
+    case 256:
+      mode = 0x06;
+      break;
+    case 1024:
+      mode = 0x7;
+      break;
+    default:
+      return;
+    }
+    TCCR2B = TCCR2B & 0b11111000 | mode;
+  }
+}
+//----------------------------------------------------                                                      
+void rtty_pwmtxbyte(char c) {                       // Convert each character byte to bits
   int i;                                            // Define disposible integer counter variable
-  rtty_txbit (0); 				    // Start bit
+  rtty_pwmtxbit(0); 				    // Start bit
   for (i=0;i<ASCII;i++)				    // 7-bit ascii (see DEFINE above)
   {
-    if (c & 1) rtty_txbit(1); 		            // Starting with least significant bit, if bit=1 then transmit MARK 
-    else rtty_txbit(0);			            // If bit=0 then transmit SPACE
+    if (c & 1) rtty_pwmtxbit(1); 		    // Starting with least significant bit, if bit=1 then transmit MARK 
+    else rtty_pwmtxbit(0);			    // If bit=0 then transmit SPACE
     c = c >> 1;                                     // Shift along to the next bit
   }
-  rtty_txbit(1);                                    // Stop bit
-  rtty_txbit(1);                                    // Stop bit                 
+  rtty_pwmtxbit(1);                                 // Stop bit
+  rtty_pwmtxbit(1);                                 // Stop bit                 
 }
 //----------------------------------------------------                                                      
-void rtty_txbit(int bit) {                          // Transmit individual bits
-  digitalWrite(RADIO_MARK_PIN,(bit>0)?HIGH:LOW);
-  digitalWrite(RADIO_SPACE_PIN,(bit>0)?LOW:HIGH);
+void rtty_pwmtxbit(int bit) {                       // Transmit individual bits using PWM
+  analogWrite(PWM_PIN,(bit>0)?127:100);
   delay(INTER_BIT_DELAY);                           // 50 bits per second i.e. baudrate
 }
-
+//----------------------------------------------------                                                      
+//This section isn't required if using PWM                    
+//----------------------------------------------------                                                      
+//void rtty_txbyte(char c) {                        // Convert each character byte to bits
+//  int i;                                          // Define disposible integer counter variable
+//  rtty_txbit(0); 				    // Start bit
+//  for (i=0;i<ASCII;i++)			    // 7-bit ascii (see DEFINE above)
+//  {
+//    if (c & 1) rtty_txbit(1); 		    // Starting with least significant bit, if bit=1 then transmit MARK 
+//    else rtty_txbit(0);			    // If bit=0 then transmit SPACE
+//    c = c >> 1;                                   // Shift along to the next bit
+//  }
+//  rtty_txbit(1);                                  // Stop bit
+//  rtty_txbit(1);                                  // Stop bit                 
+//}
+//----------------------------------------------------                                                      
+//void rtty_txbit(int bit) {                        // Transmit individual bits
+//  digitalWrite(RADIO_MARK_PIN,(bit>0)?HIGH:LOW);
+//  digitalWrite(RADIO_SPACE_PIN,(bit>0)?LOW:HIGH);
+//  delay(INTER_BIT_DELAY);                         // 50 bits per second i.e. baudrate
+//}
+//----------------------------------------------------
