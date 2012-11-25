@@ -121,7 +121,6 @@ void loop() {
           transmitCheck = sprintf (transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
 
           //Pass the transmit buffer to the RTTY function
-          //Serial.print(transmitBuffer); //debug only
           rtty_txstring(transmitBuffer);                                
         }
         iteration++;        
