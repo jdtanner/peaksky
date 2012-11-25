@@ -1,11 +1,9 @@
 //Include header files required for sketch
-#include <SoftwareSerial.h>
+#include <SoftwareSerial.h> //Remember to edit SoftwareSerial.h and c to increase buffer size to 128
 #include <TinyGPS.h>
 #include <util/crc16.h>
 
 //Make definitions
-//#define RADIO_SPACE_PIN 10 //Not needed if doing PWM
-//#define RADIO_MARK_PIN 11 //Not needed if doing PWM
 #define ENABLE_RTTY 12
 #define ASCII 7
 #define BAUD 50
@@ -27,10 +25,6 @@ SoftwareSerial ss(2,3);
 
 //Setup function of Arduino
 void setup() {
-
-  //Set up RTTY pins
-  //pinMode(RADIO_MARK_PIN,OUTPUT); //Not needed if doing PWM
-  //pinMode(RADIO_SPACE_PIN,OUTPUT); //Not needed if doing PWM
   
   //Set up pin to enable radio, PWM pin, and PWM frequency
   pinMode(ENABLE_RTTY,OUTPUT); 
@@ -78,17 +72,18 @@ void loop() {
   delay(1500);
 
   while (ss.available() > 0) {
+
     int c = ss.read();
 
     //Pass TinyGPS integer values of each character recieved from the GPS and encode
     int checkNMEASentence = gps.encode(c);
-
+    
     //Only if TinyGPS has received a complete NMEA sentence
     if (checkNMEASentence > 0) {
 
       //Query the TinyGPS object for the number of satellites
       numberOfSatellites = gps.sats();
-      Serial.println(numberOfSatellites);
+
       //Query the TinyGPS object for the date, time and age
       gps.get_datetime(&date, &time, &age);
 
@@ -126,7 +121,7 @@ void loop() {
           transmitCheck = sprintf (transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
 
           //Pass the transmit buffer to the RTTY function
-          Serial.print(transmitBuffer);
+          //Serial.print(transmitBuffer); //debug only
           rtty_txstring(transmitBuffer);                                
         }
         iteration++;        
@@ -201,7 +196,6 @@ void rtty_txstring(char *string) {                  // Transmit a string, one ch
   int i;					    // Define disposable integer counter variable
   for (i = 0; i < strlen(string); i++)	            // Iterate over the string array
   {
-    //rtty_txbyte(string[i]);			    // Pass each element of the string array to rtty_txbyte; not required if using PWM
     rtty_pwmtxbyte(string[i]);			    // Pass each element of the string array to rtty_pwmtxbyte
   }
 }
@@ -279,28 +273,6 @@ void rtty_pwmtxbyte(char c) {                       // Convert each character by
 }
 //----------------------------------------------------                                                      
 void rtty_pwmtxbit(int bit) {                       // Transmit individual bits using PWM
-  analogWrite(PWM_PIN,(bit>0)?127:100);
+  analogWrite(PWM_PIN,(bit>0)?120:100);
   delay(INTER_BIT_DELAY);                           // 50 bits per second i.e. baudrate
 }
-//----------------------------------------------------                                                      
-//This section isn't required if using PWM                    
-//----------------------------------------------------                                                      
-//void rtty_txbyte(char c) {                        // Convert each character byte to bits
-//  int i;                                          // Define disposible integer counter variable
-//  rtty_txbit(0); 				    // Start bit
-//  for (i=0;i<ASCII;i++)			    // 7-bit ascii (see DEFINE above)
-//  {
-//    if (c & 1) rtty_txbit(1); 		    // Starting with least significant bit, if bit=1 then transmit MARK 
-//    else rtty_txbit(0);			    // If bit=0 then transmit SPACE
-//    c = c >> 1;                                   // Shift along to the next bit
-//  }
-//  rtty_txbit(1);                                  // Stop bit
-//  rtty_txbit(1);                                  // Stop bit                 
-//}
-//----------------------------------------------------                                                      
-//void rtty_txbit(int bit) {                        // Transmit individual bits
-//  digitalWrite(RADIO_MARK_PIN,(bit>0)?HIGH:LOW);
-//  digitalWrite(RADIO_SPACE_PIN,(bit>0)?LOW:HIGH);
-//  delay(INTER_BIT_DELAY);                         // 50 bits per second i.e. baudrate
-//}
-//----------------------------------------------------
