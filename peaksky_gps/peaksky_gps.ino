@@ -29,11 +29,11 @@ void setup() {
   //Set up pin to enable radio, PWM pin, and PWM frequency
   pinMode(ENABLE_RTTY,OUTPUT); 
   pinMode(PWM_PIN, OUTPUT);
-  setPwmFrequency(PWM_PIN, 1); 
+  TCCR1B = TCCR1B & 0b11111000 | 0x01; //Change frequency of PWM pin 9
 
   //Start up software and hardware serial at 9600 baud
   ss.begin(9600);
-  Serial.begin(9600);
+  //Serial.begin(9600); //Only required for debugging
   delay(2000);
 
   //Set the GPS into airborne mode
@@ -113,16 +113,15 @@ void loop() {
         gpsAltitude = (gps.altitude() / 100);
 
         //Construct the transmit buffer
-        transmitCheck=sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites);
+        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites);
+        
+        //Append the CRC16 checksum to the end of the transmit buffer
+        sprintf(transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
 
-        if (transmitCheck > -1) {
-
-          //Append the CRC16 checksum to the end of the transmit buffer
-          transmitCheck = sprintf (transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
-
-          //Pass the transmit buffer to the RTTY function
-          rtty_txstring(transmitBuffer);                                
-        }
+        //Pass the transmit buffer to the RTTY function
+        rtty_txstring(transmitBuffer);                                
+        
+        //Increase the iteration counter by one
         iteration++;        
       }
     }
@@ -196,65 +195,6 @@ void rtty_txstring(char *string) {                  // Transmit a string, one ch
   for (i = 0; i < strlen(string); i++)	            // Iterate over the string array
   {
     rtty_pwmtxbyte(string[i]);			    // Pass each element of the string array to rtty_pwmtxbyte
-  }
-}
-//----------------------------------------------------                                                      
-void setPwmFrequency(int pin, int divisor) {        // See http://arduino.cc/playground/Code/PwmFrequency
-  byte mode;
-  if(pin == 5 || pin == 6 || pin == 9 || pin == 10) {
-    switch(divisor) {
-    case 1:
-      mode = 0x01;
-      break;
-    case 8:
-      mode = 0x02;
-      break;
-    case 64:
-      mode = 0x03;
-      break;
-    case 256:
-      mode = 0x04;
-      break;
-    case 1024:
-      mode = 0x05;
-      break;
-    default:
-      return;
-    }
-    if(pin == 5 || pin == 6) {
-      TCCR0B = TCCR0B & 0b11111000 | mode;
-    }
-    else {
-      TCCR1B = TCCR1B & 0b11111000 | mode;
-    }
-  }
-  else if(pin == 3 || pin == 11) {
-    switch(divisor) {
-    case 1:
-      mode = 0x01;
-      break;
-    case 8:
-      mode = 0x02;
-      break;
-    case 32:
-      mode = 0x03;
-      break;
-    case 64:
-      mode = 0x04;
-      break;
-    case 128:
-      mode = 0x05;
-      break;
-    case 256:
-      mode = 0x06;
-      break;
-    case 1024:
-      mode = 0x7;
-      break;
-    default:
-      return;
-    }
-    TCCR2B = TCCR2B & 0b11111000 | mode;
   }
 }
 //----------------------------------------------------                                                      
