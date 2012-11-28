@@ -68,16 +68,15 @@ void loop() {
   //Request NMEA sentence from GPS
   ss.print("$PUBX,00*33\r\n");
 
-  //GPS does not respond immediately, so give it 1.5 seconds
+  //GPS does not respond immediately, so give it 1.5 seconds 
+  //This is also the delay between NMEA sentences
   delay(1500);
 
   while (ss.available() > 0) {
 
-    int c = ss.read();
+    //Pass TinyGPS object each character recieved from the GPS and encode
+    int checkNMEASentence = gps.encode(ss.read());
 
-    //Pass TinyGPS integer values of each character recieved from the GPS and encode
-    int checkNMEASentence = gps.encode(c);
-    
     //Only if TinyGPS has received a complete NMEA sentence
     if (checkNMEASentence > 0) {
 
@@ -94,6 +93,7 @@ void loop() {
       second = second / 100;
 
       if (numberOfSatellites >= 1) {
+        //Turn on the NTX2 by making the EN pin high
         digitalWrite(ENABLE_RTTY, HIGH);
 
         //Get Position
