@@ -1,5 +1,6 @@
 //----------------------------------------------------                                                      
 //HELPER FUNCTIONS
+//Separated from main body to make code easier to read
 //----------------------------------------------------                                                      
 void sendUBX(uint8_t *MSG, uint8_t len) {           // Send a byte array of UBX protocol to the GPS
   for(int i=0; i<len; i++) {                        // This code was taken from http://ukhas.org.uk/guides:ublox6
