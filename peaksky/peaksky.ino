@@ -1,6 +1,6 @@
 //Title: peaksky_gps
 //Author: John D. Tanner
-//Notes: Much of this code was produced with the help of the chaps of the UKHAS on #highaltitude...cheers on and all!
+//Notes: Much of this code was produced with the help of the chaps of the UKHAS on #highaltitude...cheers one and all!
 
 //Include header files required for sketch
 #include <SoftwareSerial.h> //Remember to edit SoftwareSerial.h and c to increase buffer size to 128
