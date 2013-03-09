@@ -15,7 +15,7 @@
 #define BAUD 50
 #define INTER_BIT_DELAY (1000/BAUD)
 #define PWM_PIN 9
-#define ONE_WIRE_BUS 4 //OneWire sensors will be attached to pin 4 of the Arduino
+#define ONE_WIRE_BUS 6 //OneWire sensors will be attached to pin 4 of the Arduino
 #define TEMPERATURE_PRECISION 12 //12-bit precision for OneWire sensors i.e. 2dp
 
 //Define some variables to hold GPS data
@@ -105,7 +105,8 @@ void loop() {
     if (checkNMEASentence > 0) {
 
       //Query the TinyGPS object for the number of satellites
-      numberOfSatellites = gps.sats();
+      //Modified to use TinyGPS v12 from http://ukhas.org.uk/projects:jimbob:bob#tinygps-ubx
+      numberOfSatellites = gps.satellites();
 
       //Query the TinyGPS object for the date, time and age
       gps.get_datetime(&date, &time, &age);
@@ -115,6 +116,9 @@ void loop() {
       minute = ((time - (hour * 1000000)) / 10000);
       second = ((time - ((hour * 1000000) + (minute * 10000))));
       second = second / 100;
+      
+      //Used for debugging only.
+      Serial.println("Waiting for satellite lock.");
 
       if (numberOfSatellites >= 1) {
         //Turn on the NTX2 by making the EN pin high
@@ -156,6 +160,7 @@ void loop() {
           insideTempBuffer[0] = '+';
         }
         
+        //Used for debugging only.
         Serial.println(outsideTempBuffer);
         Serial.println(insideTempBuffer);
 
