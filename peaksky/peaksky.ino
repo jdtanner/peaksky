@@ -42,7 +42,7 @@ SoftwareSerial ss(2,3);
 
 //Setup function of Arduino
 void setup() {
-  
+
   //Set up pin to enable radio, PWM pin, and PWM frequency
   pinMode(ENABLE_RTTY,OUTPUT); 
   pinMode(PWM_PIN, OUTPUT);
@@ -62,7 +62,7 @@ void setup() {
 
   //Set the GPS into airborne mode
   uint8_t setNav[] = {
-    0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC};
+    0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC  };
   sendUBX(setNav, sizeof(setNav)/sizeof(uint8_t));
   getUBX_ACK(setNav);
 
@@ -116,9 +116,16 @@ void loop() {
       minute = ((time - (hour * 1000000)) / 10000);
       second = ((time - ((hour * 1000000) + (minute * 10000))));
       second = second / 100;
-      
+
       //Used for debugging only.
-      Serial.println("Waiting for satellite lock.");
+      Serial.println("Waiting for satellite lock.");      
+      
+      if (age == TinyGPS::GPS_INVALID_AGE)
+        Serial.println("No fix detected");
+      else if (age > 5000)
+        Serial.println("Warning: possible stale data!");
+      else
+        Serial.println("Data is current.");
 
       if (numberOfSatellites >= 1) {
         //Turn on the NTX2 by making the EN pin high
@@ -131,7 +138,7 @@ void loop() {
         dtostrf(floatLatitude, 7, 4, latitudeBuffer);
         dtostrf(floatLongitude, 7, 4, longitudeBuffer);
 
-        //Check that we are putting a +sign where applicable at the front of lonbuf
+        //Check that we are putting a +sign where applicable at the front of longitudeBuffer
         if(longitudeBuffer[0] == ' ')
         {
           longitudeBuffer[0] = '+';
@@ -148,34 +155,21 @@ void loop() {
         dtostrf(outsideTemp, 6, 2, outsideTempBuffer);
         dtostrf(insideTemp, 6, 2, insideTempBuffer);
 
-        //Check that we are putting a +sign where applicable at the front of the outside temperature string
-        if(outsideTempBuffer[0] == ' ')
-        {
-          outsideTempBuffer[0] = '+';
-        }
-        
-        //Check that we are putting a +sign where applicable at the front of the inside temperature string
-        if(insideTempBuffer[0] == ' ')
-        {
-          insideTempBuffer[0] = '+';
-        }
-        
-        //Used for debugging only.
-        Serial.println(outsideTempBuffer);
-        Serial.println(insideTempBuffer);
-
         //Construct the transmit buffer
-        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites);
-        
+        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d,%s,%s", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites, outsideTempBuffer, insideTempBuffer);
+
+        Serial.println(transmitBuffer);
+
         //Append the CRC16 checksum to the end of the transmit buffer
         sprintf(transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
 
         //Pass the transmit buffer to the RTTY function
         rtty_txstring(transmitBuffer);                                
-        
+
         //Increase the iteration counter by one
         iteration++;        
       }
     }
   }
 }
+
