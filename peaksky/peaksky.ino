@@ -8,6 +8,8 @@
 #include <util/crc16.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Wire.h>
+#include <BMP085.h> //Using library from https://code.google.com/p/bmp085driver/
 
 //Make definitions
 #define ENABLE_RTTY 12 //This allows the arduino to pull the NTX2 EN pin high, which enables the radio module
@@ -20,8 +22,9 @@
 
 //Define some variables to hold GPS data
 unsigned long date, time, age;
+long Pressure = 0;
 int hour, minute, second, numberOfSatellites, iteration = 1, transmitCheck;
-long int gpsAltitude;
+long int gpsAltitude, bmpPressure;
 char latitudeBuffer[16], longitudeBuffer[16], timeBuffer[] = "00:00:00", transmitBuffer[128], insideTempBuffer[16], outsideTempBuffer[16];
 float floatLatitude, floatLongitude, outsideTemp, insideTemp;
 
@@ -37,12 +40,17 @@ DallasTemperature sensors(&oneWire);
 //Setup arrays to hold OneWire device addresses
 DeviceAddress insideThermometer, outsideThermometer;
 
-//Define the pins on which the software serial will work Rx=2, Tx=3
+//Creat new BMP085 sensor object
+BMP085 dps = BMP085();
+
+//Create new software serial object and define the pins on which it will work Rx=2, Tx=3
 SoftwareSerial ss(2,3);
 
 //Setup function of Arduino
 void setup() {
-
+  //Initialise BMP085
+  dps.init(MODE_STANDARD, 101850, false);
+  
   //Set up pin to enable radio, PWM pin, and PWM frequency
   pinMode(ENABLE_RTTY,OUTPUT); 
   pinMode(PWM_PIN, OUTPUT);
@@ -62,7 +70,7 @@ void setup() {
 
   //Set the GPS into airborne mode
   uint8_t setNav[] = {
-    0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC  };
+    0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC    };
   sendUBX(setNav, sizeof(setNav)/sizeof(uint8_t));
   getUBX_ACK(setNav);
 
@@ -119,7 +127,7 @@ void loop() {
 
       //Used for debugging only.
       Serial.println("Waiting for satellite lock.");      
-      
+
       if (age == TinyGPS::GPS_INVALID_AGE)
         Serial.println("No fix detected");
       else if (age > 5000)
@@ -151,17 +159,21 @@ void loop() {
         sensors.requestTemperatures();
         outsideTemp = sensors.getTempC(outsideThermometer);
         insideTemp = sensors.getTempC(insideThermometer);
-        
+
         dtostrf(outsideTemp, 6, 2, outsideTempBuffer);
         dtostrf(insideTemp, 6, 2, insideTempBuffer);
 
-        //Construct the transmit buffer
-        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d,%s,%s", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites, outsideTempBuffer, insideTempBuffer);
+        //Request pressure from BMP085
+        dps.getPressure(&Pressure);
+        Serial.println(Pressure);
 
-        Serial.println(transmitBuffer);
+        //Construct the transmit buffer
+        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d,%s,%s,%lu", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites, outsideTempBuffer, insideTempBuffer, Pressure);
 
         //Append the CRC16 checksum to the end of the transmit buffer
         sprintf(transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
+
+        Serial.println(transmitBuffer);
 
         //Pass the transmit buffer to the RTTY function
         rtty_txstring(transmitBuffer);                                
@@ -172,4 +184,5 @@ void loop() {
     }
   }
 }
+
 
