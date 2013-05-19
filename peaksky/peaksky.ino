@@ -21,10 +21,9 @@
 #define TEMPERATURE_PRECISION 12 //12-bit precision for OneWire sensors i.e. 2dp
 
 //Define some variables to hold GPS data
-unsigned long date, time, age;
-long Pressure = 0;
+unsigned long date, time, age, Pressure;
 int hour, minute, second, numberOfSatellites, iteration = 1, transmitCheck;
-long int gpsAltitude, bmpPressure;
+long int gpsAltitude;
 char latitudeBuffer[16], longitudeBuffer[16], timeBuffer[] = "00:00:00", transmitBuffer[128], insideTempBuffer[16], outsideTempBuffer[16];
 float floatLatitude, floatLongitude, outsideTemp, insideTemp;
 
@@ -163,16 +162,16 @@ void loop() {
         dtostrf(outsideTemp, 6, 2, outsideTempBuffer);
         dtostrf(insideTemp, 6, 2, insideTempBuffer);
 
-        //Request pressure from BMP085
+        //Request pressure in Pascals from BMP085
         dps.getPressure(&Pressure);
-        Serial.println(Pressure);
 
         //Construct the transmit buffer
-        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d,%s,%s,%lu", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites, outsideTempBuffer, insideTempBuffer, Pressure);
+        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d,%s,%s,%d", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites, outsideTempBuffer, insideTempBuffer, Pressure);
 
         //Append the CRC16 checksum to the end of the transmit buffer
         sprintf(transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
 
+        //Debug purposes only.
         Serial.println(transmitBuffer);
 
         //Pass the transmit buffer to the RTTY function
