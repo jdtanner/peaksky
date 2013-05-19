@@ -21,9 +21,9 @@
 #define TEMPERATURE_PRECISION 12 //12-bit precision for OneWire sensors i.e. 2dp
 
 //Define some variables to hold GPS data
-unsigned long date, time, age, Pressure;
+unsigned long date, time, age;
 int hour, minute, second, numberOfSatellites, iteration = 1, transmitCheck;
-long int gpsAltitude;
+long int gpsAltitude, Pressure;
 char latitudeBuffer[16], longitudeBuffer[16], timeBuffer[] = "00:00:00", transmitBuffer[128], insideTempBuffer[16], outsideTempBuffer[16];
 float floatLatitude, floatLongitude, outsideTemp, insideTemp;
 
@@ -47,7 +47,7 @@ SoftwareSerial ss(2,3);
 
 //Setup function of Arduino
 void setup() {
-  //Initialise BMP085
+  //Initialise BMP085 with the current sea level pressure (if altitude is required).
   dps.init(MODE_STANDARD, 101850, false);
   
   //Set up pin to enable radio, PWM pin, and PWM frequency
@@ -166,7 +166,7 @@ void loop() {
         dps.getPressure(&Pressure);
 
         //Construct the transmit buffer
-        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d,%s,%s,%d", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites, outsideTempBuffer, insideTempBuffer, Pressure);
+        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d,%s,%s,%ld", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites, outsideTempBuffer, insideTempBuffer, Pressure);
 
         //Append the CRC16 checksum to the end of the transmit buffer
         sprintf(transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
