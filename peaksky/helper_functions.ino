@@ -4,8 +4,7 @@
 //----------------------------------------------------                                                      
 void sendUBX(uint8_t *MSG, uint8_t len) {           // Send a byte array of UBX protocol to the GPS
   for(int i=0; i<len; i++) {                        // This code was taken from http://ukhas.org.uk/guides:ublox6
-    //ss.write(MSG[i]);
-    Serial.write(MSG[i]);
+    ss.write(MSG[i]);
   }
 }
 //----------------------------------------------------                                                      
@@ -37,10 +36,8 @@ boolean getUBX_ACK(uint8_t *MSG) {                  // Calculate expected UBX AC
     if (millis() - startTime > 3000) {              // Timeout if no valid response in 3 seconds 
       return false;
     }
-    //if (ss.available()) {                           // Make sure data is available to read
-      //b = ss.read();
-    if (Serial.available()) {                           // Make sure data is available to read
-      b = Serial.read();
+    if (ss.available()) {                           // Make sure data is available to read
+      b = ss.read();
       if (b == ackPacket[ackByteID]) {              // Check that bytes arrive in sequence as per expected ACK packet 
         ackByteID++;
       } 
