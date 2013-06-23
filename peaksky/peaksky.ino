@@ -20,16 +20,16 @@
 #define ONE_WIRE_BUS 7 //OneWire sensors will be attached to pin 7 of the Arduino
 #define TEMPERATURE_PRECISION 12 //12-bit precision for OneWire sensors i.e. 2dp
 #define ANALOG_PIN A3 //Analog pin for battery voltage measurement
-#define ANALOG_BITS 1024 //Number of bits that an be measured on an analog pin
+#define ANALOG_BITS 1024.0 //Number of bits that an be measured on an analog pin
 #define INTERNAL_REFERENCE_VOLTAGE 1.1 //Use Arduino internal reference voltage by stating analogReference(INTERNAL);
 
 //Define some variables to hold GPS data
 unsigned long date, time, age;
-int hour, minute, second, numberOfSatellites, iteration = 1, transmitCheck, r1 = 18000, r2 = 3000;
+int hour, minute, second, numberOfSatellites, iteration = 1, transmitCheck;
 long int gpsAltitude, bmpPressure;
 //char latitudeBuffer[16], longitudeBuffer[16], timeBuffer[] = "00:00:00", transmitBuffer[128], insideTempBuffer[16], outsideTempBuffer[16], bmpTempBuffer[16], batteryVoltageBuffer[];
 char latitudeBuffer[8], longitudeBuffer[8], timeBuffer[] = "00:00:00", transmitBuffer[128], insideTempBuffer[7], outsideTempBuffer[7], bmpTempBuffer[7], batteryVoltageBuffer[6];
-float floatLatitude, floatLongitude, outsideTemp, insideTemp, bmpTemp, resistorDivider, batteryVoltage;
+float floatLatitude, floatLongitude, outsideTemp, insideTemp, bmpTemp, resistorDivider, batteryVoltage, r1=10000.0, r2=1500.0;
 
 //Create a new TinyGPS object
 TinyGPS gps;
@@ -109,7 +109,6 @@ void setup() {
 
 //Loop function of Arduino
 void loop() {
-
   //Request NMEA sentence from GPS
   ss.print("$PUBX,00*33\r\n");
 
@@ -118,7 +117,6 @@ void loop() {
   delay(2500);
 
   while (ss.available() > 0) {
-
     //Pass TinyGPS object each character recieved from the GPS and encode
     int checkNMEASentence = gps.encode(ss.read());
 
@@ -169,7 +167,7 @@ void loop() {
         //Get temperature in Celcius from BMP085
         bmpTemp = bmp.readTemperature();
 
-        //Get battery voltage using resistor divider with 18k and 3k resistors
+        //Get battery voltage using resistor divider with 10k and 1.5k resistors
         batteryVoltage = ((analogRead(ANALOG_PIN)/ANALOG_BITS)*INTERNAL_REFERENCE_VOLTAGE)/resistorDivider;
 
         //Convert floats to strings
@@ -187,7 +185,7 @@ void loop() {
         }
 
         //Construct the transmit buffer
-        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d,%s,%s,%ld,%s", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites, outsideTempBuffer, insideTempBuffer, bmpPressure, bmpTempBuffer);
+        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d,%s,%s,%ld,%s,%s", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites, outsideTempBuffer, insideTempBuffer, bmpPressure, bmpTempBuffer,batteryVoltageBuffer);
 
         //Append the CRC16 checksum to the end of the transmit buffer
         sprintf(transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
