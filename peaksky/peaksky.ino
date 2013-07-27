@@ -1,15 +1,17 @@
-//Title: peaksky_gps
+//Title:  peaksky
 //Author: John D. Tanner
-//Notes: Much of this code was produced with the help of the chaps of the UKHAS on #highaltitude...cheers one and all!
+//Notes:  Much of this code was produced with the help of the chaps of the UKHAS on #highaltitude...cheers one and all!
+//        Must edit Serial files to increase buffer size to 128 to account for the long transmit string.
+//        SdCard must be formatted with Fat16 and therefore maximum 2GB in size.
 
 //Include header files required for sketch
-#include <SoftwareSerial.h> //Remember to edit SoftwareSerial.h and c to increase buffer size to 128
 #include <TinyGPS.h> //TinyGPS v12 from http://ukhas.org.uk/projects:jimbob:bob#tinygps-ubx
 #include <util/crc16.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Wire.h>
 #include <Adafruit_BMP085.h>
+#include <Fat16.h> //Smaller SdCard library from https://code.google.com/p/fat16lib/
 
 //State definitions
 #define ENABLE_RTTY 8 //This allows the arduino to pull the NTX2 EN pin high, which enables the radio module
@@ -22,14 +24,14 @@
 #define ANALOG_PIN A3 //Analog pin for battery voltage measurement
 #define ANALOG_BITS 1024.0 //Number of bits that an be measured on an analog pin
 #define INTERNAL_REFERENCE_VOLTAGE 1.1 //Use Arduino internal reference voltage by stating analogReference(INTERNAL);
+#define RESISTOR_DIVIDER 0.1304347826087 //R2/(R1+R2) where R1=10k and R2=1.5k in a voltage divider 
 
 //Define some variables to hold GPS data
 unsigned long date, time, age;
 int hour, minute, second, numberOfSatellites, iteration = 1, transmitCheck;
-long int gpsAltitude, bmpPressure;
-//char latitudeBuffer[16], longitudeBuffer[16], timeBuffer[] = "00:00:00", transmitBuffer[128], insideTempBuffer[16], outsideTempBuffer[16], bmpTempBuffer[16], batteryVoltageBuffer[];
-char latitudeBuffer[8], longitudeBuffer[8], timeBuffer[] = "00:00:00", transmitBuffer[128], insideTempBuffer[7], outsideTempBuffer[7], bmpTempBuffer[7], batteryVoltageBuffer[6];
-float floatLatitude, floatLongitude, outsideTemp, insideTemp, bmpTemp, resistorDivider, batteryVoltage, r1=10000.0, r2=1500.0;
+long gpsAltitude, bmpPressure;
+char latitudeBuffer[8], longitudeBuffer[8], timeBuffer[] = "00:00:00", transmitBuffer[128], insideTempBuffer[7], outsideTempBuffer[7], bmpTempBuffer[7], batteryVoltageBuffer[5];
+float floatLatitude, floatLongitude;
 
 //Create a new TinyGPS object
 TinyGPS gps;
@@ -46,16 +48,14 @@ DeviceAddress insideThermometer, outsideThermometer;
 //Create new BMP085 sensor object
 Adafruit_BMP085 bmp;
 
-//Create new software serial object and define the pins on which it will work Tx to GPS Rx and visa versa (format is ss(Rx, Tx))
-SoftwareSerial ss(2,3);
+//Create new SdCard and Fat16 objects
+SdCard card;
+Fat16 file;
 
 //Setup function of Arduino
 void setup() {
   //Only allow the analog pin to reach a statble reference of 1.1V
   analogReference(INTERNAL);
-
-  //Calculate resistor divider fraction
-  resistorDivider = r2/(r1+r2);
 
   //Set up pin to enable radio and PWM pin
   pinMode(ENABLE_RTTY,OUTPUT); 
@@ -72,12 +72,16 @@ void setup() {
   sensors.setResolution(outsideThermometer, TEMPERATURE_PRECISION);
 
   //Start up software and hardware serial at 9600 baud
-  ss.begin(9600);
   Serial.begin(9600); //Only required for debugging
 
   //Initialise BMP085 sensor
   bmp.begin();
-
+  
+  //Start up the SdCard and Fat16 volume, then clear any write errors
+  card.init();
+  Fat16::init(&card);
+  file.writeError = false;
+  
   //Give everything a chance to breathe :)
   delay(2000);
 
@@ -88,19 +92,19 @@ void setup() {
   getUBX_ACK(setNav);
 
   //Disable GPS data that we don't need
-  ss.print("$PUBX,40,GLL,0,0,0,0*5C\r\n");
+  Serial.print("$PUBX,40,GLL,0,0,0,0*5C\r\n");
   delay(500);
-  ss.print("$PUBX,40,ZDA,0,0,0,0*44\r\n");
+  Serial.print("$PUBX,40,ZDA,0,0,0,0*44\r\n");
   delay(500);
-  ss.print("$PUBX,40,VTG,0,0,0,0*5E\r\n");
+  Serial.print("$PUBX,40,VTG,0,0,0,0*5E\r\n");
   delay(500);
-  ss.print("$PUBX,40,GSV,0,0,0,0*59\r\n");
+  Serial.print("$PUBX,40,GSV,0,0,0,0*59\r\n");
   delay(500);
-  ss.print("$PUBX,40,GSA,0,0,0,0*4E\r\n");
+  Serial.print("$PUBX,40,GSA,0,0,0,0*4E\r\n");
   delay(500);
-  ss.print("$PUBX,40,RMC,0,0,0,0*47\r\n");
+  Serial.print("$PUBX,40,RMC,0,0,0,0*47\r\n");
   delay(500);
-  ss.print("$PUBX,40,GGA,0,0,0,0*5A\r\n");
+  Serial.print("$PUBX,40,GGA,0,0,0,0*5A\r\n");
   delay(500);
 
   //Give the GPS time to breathe :)
@@ -110,19 +114,18 @@ void setup() {
 //Loop function of Arduino
 void loop() {
   //Request NMEA sentence from GPS
-  ss.print("$PUBX,00*33\r\n");
+  Serial.print("$PUBX,00*33\r\n");
 
-  //GPS does not respond immediately, so give it 2.5 seconds 
+  //GPS does not respond immediately, so give it 2 seconds 
   //**This is also the delay between NMEA sentences**
-  delay(2500);
+  delay(2000);
 
-  while (ss.available() > 0) {
+  while (Serial.available() > 0) {
     //Pass TinyGPS object each character recieved from the GPS and encode
-    int checkNMEASentence = gps.encode(ss.read());
+    int checkNMEASentence = gps.encode(Serial.read());
 
     //Only if TinyGPS has received a complete NMEA sentence
     if (checkNMEASentence > 0) {
-
       //Get number of satellites 
       numberOfSatellites = gps.satellites();
 
@@ -135,16 +138,16 @@ void loop() {
       second = ((time - ((hour * 1000000) + (minute * 10000))));
       second = second / 100;
 
-      /////////////////////////////////////////////////////
-      //Used for debugging only.
-      Serial.println("Waiting for satellite lock."); 
-      if (age == TinyGPS::GPS_INVALID_AGE)
-        Serial.println("No fix detected");
-      else if (age > 5000)
-        Serial.println("Warning: possible stale data!");
-      else
-        Serial.println("Data is current.");
-      /////////////////////////////////////////////////////
+//      /////////////////////////////////////////////////////
+//      //Used for debugging only.
+//      mySerial.println("Waiting for satellite lock."); 
+//      if (age == TinyGPS::GPS_INVALID_AGE)
+//        mySerial.println("No fix detected");
+//      else if (age > 5000)
+//        mySerial.println("Warning: possible stale data!");
+//      else
+//        mySerial.println("Data is current.");
+//      /////////////////////////////////////////////////////
 
       if (numberOfSatellites >= 1) {
         //Turn on the NTX2 by making the EN pin high when a satellite lock is established
@@ -156,27 +159,19 @@ void loop() {
         //Get altitude and convert to metres
         gpsAltitude = (gps.altitude() / 100);
 
-        //Get temperatures from all OneWire sensors 
+        //Request temperatures from all OneWire sensors 
         sensors.requestTemperatures();
-        outsideTemp = sensors.getTempC(outsideThermometer);
-        insideTemp = sensors.getTempC(insideThermometer);
 
         //Get pressure in Pascals from BMP085
-        bmpPressure = bmp.readPressure();
-
-        //Get temperature in Celcius from BMP085
-        bmpTemp = bmp.readTemperature();
-
-        //Get battery voltage using resistor divider with 10k and 1.5k resistors
-        batteryVoltage = ((analogRead(ANALOG_PIN)/ANALOG_BITS)*INTERNAL_REFERENCE_VOLTAGE)/resistorDivider;
+        bmpPressure = bmp.readPressure();     
 
         //Convert floats to strings
         dtostrf(floatLatitude, 7, 4, latitudeBuffer);
         dtostrf(floatLongitude, 7, 4, longitudeBuffer);
-        dtostrf(outsideTemp, 6, 2, outsideTempBuffer);
-        dtostrf(insideTemp, 6, 2, insideTempBuffer);
-        dtostrf(bmpTemp, 6, 2, bmpTempBuffer);
-        dtostrf(batteryVoltage, 5, 2, batteryVoltageBuffer);
+        dtostrf(sensors.getTempC(outsideThermometer), 6, 2, outsideTempBuffer); //Get temperatures from all OneWire sensors 
+        dtostrf(sensors.getTempC(insideThermometer), 6, 2, insideTempBuffer); //Get temperatures from all OneWire sensors 
+        dtostrf(bmp.readTemperature(), 6, 2, bmpTempBuffer); //Get temperature in Celcius from BMP085
+        dtostrf(((analogRead(ANALOG_PIN)/ANALOG_BITS)*INTERNAL_REFERENCE_VOLTAGE)/RESISTOR_DIVIDER, 4, 2, batteryVoltageBuffer); //Get battery voltage using resistor divider with 10k and 1.5k resistors
 
         //Check that we are putting a +sign where applicable at the front of longitudeBuffer
         if(longitudeBuffer[0] == ' ')
@@ -185,16 +180,18 @@ void loop() {
         }
 
         //Construct the transmit buffer
-        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d,%s,%s,%ld,%s,%s", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites, outsideTempBuffer, insideTempBuffer, bmpPressure, bmpTempBuffer,batteryVoltageBuffer);
+        sprintf(transmitBuffer, "$$PEAKSKY,%d,%02d:%02d:%02d,%s,%s,%ld,%d,%s,%s,%ld,%s,%s", iteration, hour, minute, second, latitudeBuffer, longitudeBuffer, gpsAltitude, numberOfSatellites, outsideTempBuffer, insideTempBuffer, bmpPressure, bmpTempBuffer, batteryVoltageBuffer);
 
         //Append the CRC16 checksum to the end of the transmit buffer
         sprintf(transmitBuffer, "%s*%04X\n", transmitBuffer, gps_CRC16_checksum(transmitBuffer));
 
-        //Used for debugging only.
-        Serial.print(transmitBuffer);
-
         //Pass the transmit buffer to the RTTY function
-        rtty_txstring(transmitBuffer);                                
+        rtty_txstring(transmitBuffer);
+        
+        //Open the datalog file, write the transmit buffer to it, then close it
+        file.open("DATALOG.DAT", O_CREAT | O_APPEND | O_WRITE);
+        file.print(transmitBuffer);
+        file.close();
 
         //Increase the iteration counter by one
         iteration++;        
@@ -202,6 +199,3 @@ void loop() {
     }
   }
 }
-
-
-
