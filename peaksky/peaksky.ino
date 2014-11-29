@@ -30,7 +30,8 @@
 unsigned long date, time, age;
 int hour, minute, second, numberOfSatellites, iteration = 1, transmitCheck;
 long gpsAltitude, bmpPressure;
-char latitudeBuffer[8], longitudeBuffer[8], timeBuffer[] = "00:00:00", transmitBuffer[128], outsideTempBuffer[8], bmpTempBuffer[7], batteryVoltageBuffer[5];
+char latitudeBuffer[8], longitudeBuffer[8], timeBuffer[] = "00:00:00", transmitBuffer[128], outsideTempBuffer[7], bmpTempBuffer[7], batteryVoltageBuffer[5];
+//char latitudeBuffer[8], longitudeBuffer[8], timeBuffer[] = "00:00:00", transmitBuffer[128], outsideTempBuffer[8], bmpTempBuffer[7], batteryVoltageBuffer[5];
 float floatLatitude, floatLongitude;
 
 //Create a new TinyGPS object
@@ -166,7 +167,8 @@ void loop() {
         //Convert floats to strings
         dtostrf(floatLatitude, 7, 4, latitudeBuffer);
         dtostrf(floatLongitude, 7, 4, longitudeBuffer);
-        dtostrf(sensors.getTempC(outsideThermometer), 7, 2, outsideTempBuffer); //Get and convert external OneWire temperature
+        dtostrf(sensors.getTempC(outsideThermometer), 6, 2, outsideTempBuffer); //Get and convert external OneWire temperature
+        //dtostrf(sensors.getTempC(outsideThermometer), 7, 2, outsideTempBuffer); //Get and convert external OneWire temperature
         dtostrf(bmp.readTemperature(), 6, 2, bmpTempBuffer); //Get temperature in Celcius from BMP085
         dtostrf(((analogRead(ANALOG_PIN)/ANALOG_BITS)*INTERNAL_REFERENCE_VOLTAGE)/RESISTOR_DIVIDER, 4, 2, batteryVoltageBuffer); //Get battery voltage using resistor divider with 10k and 1.5k resistors
 
